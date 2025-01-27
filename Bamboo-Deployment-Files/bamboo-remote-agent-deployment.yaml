@@ -1,0 +1,79 @@
+
+# bamboo-agent-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bamboo-agent
+  namespace: bamboo
+spec:
+  replicas: 1  # You can adjust the number of replicas
+  selector:
+    matchLabels:
+      app: bamboo-agent
+  template:
+    metadata:
+      labels:
+        app: bamboo-agent
+    spec:
+      containers:
+        - name: bamboo-agent
+          image: abdullahsaleh2001/bamboo-remote-agent-base-dind
+          ports:
+            - containerPort: 32000
+              name: http
+          env:
+            - name: BAMBOO_SERVER
+              value: "http://bamboo:8085/agentServer/" # Bamboo server URL
+            - name: DOCKER_HOST
+              value: "tcp://bamboo-agent:2375" # Bamboo agent connects to DinD sidecar
+          volumeMounts:
+            - name: bamboo-shared-home  # I changed here 
+              mountPath: /var/atlassian/application-data/agent
+            - name: bamboo-shared-home # I changed here 
+              mountPath: /var/lib/docker
+            - name: build-dir
+              mountPath: /var/atlassian/application-data/bamboo-agent/xml-data/build-dir
+          # DinD Sidecar Container
+        - name: dind
+          image: docker:20.10-dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: "" # Disable TLS for simplicity
+          ports:
+            - containerPort: 2375 # Docker API port
+          volumeMounts:
+            - name: bamboo-shared-home # I changed here 
+              mountPath: /var/lib/docker
+            - name: build-dir
+              mountPath: /var/atlassian/application-data/bamboo-agent/xml-data/build-dir
+      volumes:
+        - name: bamboo-shared-home
+          persistentVolumeClaim:
+            claimName: bamboo-shared-home
+        - name: build-dir
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bamboo-agent
+spec:
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      name: springbootapp 
+      port: 8080
+      targetPort: 8080
+    - protocol: TCP
+      name: web 
+      port: 32000
+      targetPort: 32000
+    - protocol: TCP
+      name: tcp
+      port: 2375
+      targetPort: 2375
+  selector:
+    app: bamboo-agent  # Match the labels in your Bamboo-agent deployment

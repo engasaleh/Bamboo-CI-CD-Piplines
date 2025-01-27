@@ -1,0 +1,141 @@
+# bamboo-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bamboo
+  namespace: bamboo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bamboo
+  template:
+    metadata:
+      labels:
+        app: bamboo
+    spec:
+      containers:
+        - name: bamboo
+          image: atlassian/bamboo:latest
+          env:
+            - name: BAMBOO_HOME
+              value: /var/atlassian/application-data/bamboo
+            - name: BAMBOO_DATABASE_TYPE
+              value: postgresql
+            - name: BAMBOO_DATABASE_URL
+              value: jdbc:postgresql://postgres:5432/bamboo
+            - name: BAMBOO_DATABASE_USERNAME
+              value: bamboo
+            - name: BAMBOO_DATABASE_PASSWORD
+              value: "0000"
+            - name: JAVA_OPTS
+              value: "-Dsun.reflect.debug-false"
+          ports:
+            - containerPort: 8085
+          volumeMounts:
+            - name: bamboo-shared-home
+              mountPath: /var/atlassian/application-data/bamboo
+      volumes:
+        - name: bamboo-shared-home
+          persistentVolumeClaim:
+            claimName: bamboo-shared-home
+# Kamel Service YAML File
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bamboo
+  namespace: bamboo
+spec:
+  type: NodePort
+  ports:
+    - protocol: TCP
+      name: web 
+      port: 8085
+      targetPort: 8085
+    - protocol: TCP
+      name: ssl 
+      port: 54663
+      targetPort: 54663
+
+  selector:
+    app: bamboo  # Match the labels in your Bamboo deployment
+
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: bamboo
+#   namespace: bamboo
+# spec:
+#   type: NodePort
+#   ports:
+#     - port: 8085
+#       name: http
+#       targetPort: 8085
+#       nodePort: 32000
+#     - port: 54663
+#       targetPort: 54663
+#       name: ssl
+#       nodePort: 32001
+#   selector:
+#     app: bamboo
+
+# # bamboo-deployment.yaml
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: bamboo
+#   namespace: bamboo
+# spec:
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: bamboo
+#   template:
+#     metadata:
+#       labels:
+#         app: bamboo
+#     spec:
+#       containers:
+#         - name: bamboo
+#           image: atlassian/bamboo-server:latest
+  
+#           env:
+#             - name: BAMBOO_HOME
+#               value: /var/atlassian/application-data/bamboo
+#             - name: BAMBOO_DATABASE_TYPE
+#               value: postgresql
+#             - name: BAMBOO_DATABASE_URL
+#               value: jdbc:postgresql://postgres:5432/bamboo
+#             - name: BAMBOO_DATABASE_USERNAME
+#               value: bamboo
+#             - name: BAMBOO_DATABASE_PASSWORD
+#               value: "0000"
+#           ports:
+#             - containerPort: 8085
+#           volumeMounts:
+#             - name: bamboo-shared-home
+#               mountPath: /var/atlassian/application-data/bamboo
+#       volumes:
+#         - name: bamboo-shared-home
+#           persistentVolumeClaim:
+#             claimName: bamboo-shared-home
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: bamboo
+#   namespace: bamboo
+# spec:
+#   type: NodePort
+#   ports:
+#     - port: 8085
+#       targetPort: 8085
+#       nodePort: 32000
+
+#     - protocol: TCP
+#       name: ssl 
+#       port: 54663
+#       targetPort: 54663
+#   selector:
+#     app: bamboo
