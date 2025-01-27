@@ -1,0 +1,144 @@
+# Namespace for Bitbucket
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bitbucket
+---
+# StorageClass definition
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: bitbucket-storage-class
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp2
+---
+# Persistent Volume for Bitbucket Data (Physical storage)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: bitbucket-pv
+  namespace: bitbucket
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: bitbucket-storage-class
+  hostPath:
+    path: /mnt/data/bitbucket
+---
+# Persistent Volume Claim for Bitbucket Data (Reserving the PV)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bitbucket-pvc
+  namespace: bitbucket
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: bitbucket-storage-class
+---
+# StatefulSet for Bitbucket Deployment (Stateful app with persistent data)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: bitbucket
+  namespace: bitbucket
+spec:
+  serviceName: bitbucket
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bitbucket
+  template:
+    metadata:
+      labels:
+        app: bitbucket
+    spec:
+      containers:
+        - name: bitbucket
+          image: atlassian/bitbucket:latest
+          ports:
+            - containerPort: 7990
+            - containerPort: 7999
+          env:
+            - name: BITBUCKET_HOME
+              value: /var/atlassian/application-data/bitbucket
+          volumeMounts:
+            - name: bitbucket-data
+              mountPath: /var/atlassian/application-data/bitbucket
+      volumes:
+        - name: bitbucket-data
+          persistentVolumeClaim:
+            claimName: bitbucket-pvc
+---
+# Service for Bitbucket (Internal Service to manage pod access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: bitbucket
+  namespace: bitbucket
+spec:
+  selector:
+    app: bitbucket
+  ports:
+    - name: http
+      port: 7990
+      targetPort: 7990
+    - name: ssh
+      port: 7999
+      targetPort: 7999
+  clusterIP: None # Ensures a stable DNS name for StatefulSet pods
+---
+# Ingress Controller (NGINX Ingress controller as an example)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingress-nginx-controller
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingress-nginx
+  template:
+    metadata:
+      labels:
+        app: ingress-nginx
+    spec:
+      containers:
+        - name: nginx-ingress-controller
+          image: nginx/nginx-ingress:latest
+          ports:
+            - containerPort: 80
+            - containerPort: 443
+          args:
+            - /nginx-ingress-controller
+            - --configmap=kube-system/ingress-nginx-controller
+---
+# Ingress Resource to define routing rules for Bitbucket
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bitbucket-ingress
+  namespace: bitbucket
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+    - host: bitbucket.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bitbucket
+                port:
+                  number: 7990
